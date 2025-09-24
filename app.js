@@ -190,16 +190,10 @@ const assistant = new Assistant({
           if (m.user) llmPrompt += `\n<@${m.user}> says: ${m.text}`;
         }
 
-        const messages = [
-          { role: 'system', content: DEFAULT_SYSTEM_CONTENT },
-          { role: 'user', content: llmPrompt },
-        ];
-
         // Send channel history and prepared request to LLM
-        const llmResponse = await openai.chat.completions.create({
+        const llmResponse = await openai.responses.create({
           model: 'gpt-4o-mini',
-          n: 1,
-          messages,
+          input: `System: ${DEFAULT_SYSTEM_CONTENT}\n\nUser: ${llmPrompt}`,
         });
         // Huggingface
         // const llmResponse = await hfClient.chatCompletion({
@@ -209,7 +203,7 @@ const assistant = new Assistant({
         // });
 
         // Provide a response to the user
-        await say({ text: llmResponse.choices[0].message.content });
+        await say({ text: llmResponse.output_text });
 
         return;
       }
@@ -226,21 +220,20 @@ const assistant = new Assistant({
       });
 
       // Prepare and tag each message for LLM processing
-      const userMessage = { role: 'user', content: message.text };
       const threadHistory = thread.messages.map((m) => {
-        const role = m.bot_id ? 'assistant' : 'user';
-        return { role, content: m.text };
+        const role = m.bot_id ? 'Assistant' : 'User';
+        return `${role}: ${m.text || ''}`;
       });
+      // parsed threadHistory to align with openai.responses api input format
+      const parsedThreadHistory = threadHistory.join('\n');
 
-      const messages = [{ role: 'system', content: DEFAULT_SYSTEM_CONTENT }, ...threadHistory, userMessage];
+      const messages = `System: ${DEFAULT_SYSTEM_CONTENT}\n\n${parsedThreadHistory}\nUser: ${message.text}`;
 
       // Send message history and newest question to LLM
-      const llmResponse = await openai.chat.completions.create({
+      const llmResponse = await openai.responses.create({
         model: 'gpt-4o-mini',
-        n: 1,
-        messages,
+        input: messages,
       });
-
       // Huggingface
       // const llmResponse = await hfClient.chatCompletion({
       //   model: 'Qwen/QwQ-32B',
@@ -249,12 +242,12 @@ const assistant = new Assistant({
       // });
 
       // Provide a response to the user
-      await say({ text: llmResponse.choices[0].message.content });
+      await say({ text: llmResponse.output_text });
     } catch (e) {
       logger.error(e);
 
       // Send message to advise user and clear processing status if a failure occurs
-      await say({ text: 'Sorry, something went wrong!' });
+      await say({ text: `Sorry, something went wrong! ${e}` });
     }
   },
 });
